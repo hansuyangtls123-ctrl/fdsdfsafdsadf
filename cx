@@ -1,0 +1,137 @@
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+local isLocked = false
+local tpDistance = 3
+local MAX_RANGE = 2000  -- ← 여기서 범위 조절 (2000 추천)
+
+----------------------------------------------------------------
+-- GUI (버튼 하나)
+----------------------------------------------------------------
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "RandomTPGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 200, 0, 70)
+mainFrame.Position = UDim2.new(1, -220, 0, 60)
+mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+mainFrame.BackgroundTransparency = 0.4
+mainFrame.Parent = screenGui
+
+local uiCorner = Instance.new("UICorner")
+uiCorner.Parent = mainFrame
+
+local aimButton = Instance.new("TextButton")
+aimButton.Size = UDim2.new(0, 180, 0, 50)
+aimButton.Position = UDim2.new(0, 10, 0, 10)
+aimButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+aimButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+aimButton.Text = "START RANDOM TP"
+aimButton.Font = Enum.Font.GothamBold
+aimButton.TextSize = 14
+aimButton.Parent = mainFrame
+
+----------------------------------------------------------------
+-- 성능 최적화 변수
+----------------------------------------------------------------
+local candidates = {}
+local lastUpdate = 0
+local UPDATE_INTERVAL = 0.45  -- 약간 여유 있게 조정
+
+----------------------------------------------------------------
+-- 후보자 업데이트 (성능 중요)
+----------------------------------------------------------------
+local function updateCandidates()
+    local myChar = player.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then
+        candidates = {}
+        return
+    end
+    
+    local myPos = myChar.HumanoidRootPart.Position
+    local newCandidates = {}
+    
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character then
+            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local dist = (hrp.Position - myPos).Magnitude
+                if dist < MAX_RANGE and dist > 5 then
+                    table.insert(newCandidates, p)
+                end
+            end
+        end
+    end
+    
+    candidates = newCandidates
+end
+
+----------------------------------------------------------------
+-- 랜덤 타겟
+----------------------------------------------------------------
+local function getRandomNearbyPlayer()
+    if #candidates == 0 then return nil end
+    return candidates[math.random(1, #candidates)]
+end
+
+----------------------------------------------------------------
+-- 토글
+----------------------------------------------------------------
+local function toggleTracking()
+    isLocked = not isLocked
+    
+    if isLocked then
+        aimButton.Text = "RANDOM TP ACTIVE"
+        aimButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+        updateCandidates()
+    else
+        aimButton.Text = "START RANDOM TP"
+        aimButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    end
+end
+
+aimButton.MouseButton1Click:Connect(toggleTracking)
+
+----------------------------------------------------------------
+-- 주기적 후보 업데이트
+----------------------------------------------------------------
+RunService.Heartbeat:Connect(function()
+    if isLocked and tick() - lastUpdate > UPDATE_INTERVAL then
+        updateCandidates()
+        lastUpdate = tick()
+    end
+end)
+
+----------------------------------------------------------------
+-- 메인 루프
+----------------------------------------------------------------
+RunService.RenderStepped:Connect(function()
+    if not isLocked then return end
+    
+    local target = getRandomNearbyPlayer()
+    if not target or not target.Character then return end
+    
+    local targetChar = target.Character
+    local myChar = player.Character
+    if not myChar then return end
+    
+    local hrp = targetChar:FindFirstChild("HumanoidRootPart")
+    local head = targetChar:FindFirstChild("Head")
+    local myHrp = myChar:FindFirstChild("HumanoidRootPart")
+    
+    if hrp and head and myHrp then
+        -- Aimlock
+        camera.CFrame = CFrame.new(camera.CFrame.Position, head.Position)
+        
+        -- 뒤로 순간이동
+        local backPos = hrp.Position - (hrp.CFrame.LookVector * tpDistance)
+        myHrp.CFrame = CFrame.new(backPos, hrp.Position)
+    end
+end)
+
+print("Random TP Script Loaded - Max Range: " .. MAX_RANGE .. " studs")
